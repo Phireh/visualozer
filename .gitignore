@@ -1,0 +1,19 @@
+# TAGS files
+tags
+TAGS
+GTAGS
+GPATH
+GRTAGS
+gtags
+
+# Emacs temp files
+\#*\#
+.\#*
+
+# Vim temp /swap files
+*~
+.*.swp
+.*.swo
+
+# Binary blobs
+visualozer
