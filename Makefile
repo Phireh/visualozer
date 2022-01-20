@@ -8,9 +8,10 @@ SRCDIR=src
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S), Linux) # flags for Linux build
 	LDFLAGS+=-ldl
-endif ($(UNAME_S), Darwin) # flags for the Mac build
+endif
+ifeq ($(UNAME_S), Darwin) # flags for the Mac build
 	LDFLAGS+=-framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo -L/usr/local/lib
-ifeq 
+endif
 
 visualozer: $(SRCDIR)/main.c
 	$(CC) $(SRCDIR)/main.c $(CFLAGS) -o visualozer $(LDFLAGS)
