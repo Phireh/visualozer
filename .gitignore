@@ -17,3 +17,6 @@ gtags
 
 # Binary blobs
 visualozer
+
+# Precompiled headers
+*.h.gch

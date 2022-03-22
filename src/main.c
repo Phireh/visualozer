@@ -1,39 +1,9 @@
-/* STDLIB includes */
-#include <stdio.h>
-#include <getopt.h>
-
-/* Misc. includes */
-#ifdef __linux__
-#include <linux/limits.h> // for PATH_MAX
-#else
-#include <limits.h> // TODO: check if Mac actually as PATH_MAX here
-#endif
-
-/* Miniaudio includes */
-#include "miniaudio_config.h"
-#define MINIAUDIO_IMPLEMENTATION
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function" // ignore spureous warnings from 3rd party libs
-#include "miniaudio.h"
-#pragma GCC diagnostic pop
+#include "main.h"
 
 
-/* Nuklear / GLFW includes */
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-
-#define NK_INCLUDE_FIXED_TYPES
-#define NK_INCLUDE_STANDARD_IO
-#define NK_INCLUDE_STANDARD_VARARGS
-#define NK_INCLUDE_DEFAULT_ALLOCATOR
-#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
-#define NK_INCLUDE_FONT_BAKING
-#define NK_INCLUDE_DEFAULT_FONT
-#define NK_IMPLEMENTATION
-#define NK_GLFW_GL3_IMPLEMENTATION
-#define NK_KEYSTATE_BASED_INPUT
-#include "nuklear.h"
-#include "nuklear_glfw_gl3.h"
+/* Global vars */
+const int32_t default_width = 1024;
+const int32_t default_height = 720;
 
 
 
@@ -176,7 +146,10 @@ int main(int argc, char *argv[])
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
     // TODO: remove magic numbers
-    win = glfwCreateWindow(1024, 720, "Visualozer", NULL, NULL);
+    glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+    glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    win = glfwCreateWindow(default_width, default_height, "Visualozer", NULL, NULL);
     glfwMakeContextCurrent(win);
     glfwGetWindowSize(win, &width, &height);
 
@@ -214,16 +187,23 @@ int main(int argc, char *argv[])
 
         /* GUI */
         nk_glfw3_new_frame(&glfw);
-        if (nk_begin(ctx, "WIP", nk_rect(50, 50, 230, 250),
-                     NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-                     NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
+        if (nk_begin(ctx, "WIP", nk_rect(0, 0, glfw.width, glfw.height),
+                     NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_CLOSABLE|NK_WINDOW_MOVABLE))
         {
-            nk_layout_row_dynamic(ctx, 25, 1);
-            if (nk_tree_push(ctx, NK_TREE_TAB, "WIP", NK_MINIMIZED))
+
+            if (!nk_window_is_closed(ctx, "WIP"))
             {
                 nk_layout_row_dynamic(ctx, 25, 1);
-                nk_label(ctx, "File picker goes here", NK_TEXT_LEFT);
-                nk_tree_pop(ctx);
+                if (nk_tree_push(ctx, NK_TREE_TAB, "WIP", NK_MINIMIZED))
+                {
+                    nk_layout_row_dynamic(ctx, 25, 1);
+                    nk_label(ctx, "File picker goes here", NK_TEXT_LEFT);
+                    nk_tree_pop(ctx);
+                }
+            }
+            else
+            {
+                printf("Closing window");
             }
         }
         nk_end(ctx);
