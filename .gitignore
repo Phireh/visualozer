@@ -19,4 +19,7 @@ gtags
 visualozer
 
 # Precompiled headers
-*.h.gch
+*.h.pch
+
+# Object files
+*.o
