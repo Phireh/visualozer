@@ -1,10 +1,24 @@
 //#include "main.h"
-
+#include <stdbool.h>
 
 /* Global vars */
 const int32_t default_width = 1024;
 const int32_t default_height = 720;
 
+typedef enum {
+    MOUSE_LEFT_CLICK  = (1 << 0),
+    MOUSE_RIGHT_CLICK = (1 << 1)
+} mouse_state_t;
+
+typedef struct {
+    /* Current position */
+    double x;
+    double y;
+    /* Last position */
+    double lx;
+    double ly;
+    uint32_t state;
+} mouse_input_t;
 
 
 // TODO: Make a nicer error callback for glfw
@@ -179,20 +193,34 @@ int main(int argc, char *argv[])
 
     bg.r = 0.10f, bg.g = 0.18f, bg.b = 0.24f, bg.a = 1.0f;
 
+
+    bool first_frame = true;
+    mouse_input_t mouse_input = {};
+
     while (!glfwWindowShouldClose(win))
     {
         /* Input */
         glfwPollEvents();
+        mouse_input.lx = mouse_input.x;
+        mouse_input.ly = mouse_input.y;
+
+        glfwGetCursorPos(win, &mouse_input.x, &mouse_input.y);
+
+        if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+            mouse_input.state |= MOUSE_LEFT_CLICK;
+        else
+            mouse_input.state &= ~MOUSE_LEFT_CLICK;
+
 
 
         /* GUI */
-        nk_glfw3_new_frame(&glfw);
-        if (nk_begin(ctx, "WIP", nk_rect(0, 0, glfw.width, glfw.height),
-                     NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_CLOSABLE|NK_WINDOW_MOVABLE))
+        if (first_frame || !nk_window_is_closed(ctx, "WIP"))
         {
-
-            if (!nk_window_is_closed(ctx, "WIP"))
+            nk_glfw3_new_frame(&glfw);
+            if (nk_begin(ctx, "WIP", nk_rect(0, 0, glfw.width, glfw.height),
+                         NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_CLOSABLE))
             {
+
                 nk_layout_row_dynamic(ctx, 25, 1);
                 if (nk_tree_push(ctx, NK_TREE_TAB, "WIP", NK_MINIMIZED))
                 {
@@ -203,10 +231,31 @@ int main(int argc, char *argv[])
             }
             else
             {
-                printf("Closing window");
+                goto cleanup_and_exit;
             }
+
+            if (nk_window_is_hovered(ctx))
+            {
+                struct nk_rect actual_bounds = ctx->current->bounds;
+                actual_bounds.h = ctx->current->layout->header_height;
+
+                if (nk_input_is_mouse_hovering_rect(&ctx->input, actual_bounds) &&
+                    mouse_input.state & MOUSE_LEFT_CLICK)
+                {
+                    double dx = mouse_input.x - mouse_input.lx;
+                    double dy = mouse_input.y - mouse_input.ly;
+                    int32_t xpos, ypos;
+                    glfwGetWindowPos(win, &xpos, &ypos);
+                    glfwSetWindowPos(win, xpos + dx, ypos + dy);
+                    printf("Dragging window %.2f x %.2f y \n", dx, dy);
+                    mouse_input.x -= dx;
+                    mouse_input.y -= dy;
+                }
+            }
+
+            nk_end(ctx);
         }
-        nk_end(ctx);
+
 
 
 
@@ -222,7 +271,7 @@ int main(int argc, char *argv[])
          * rendering the UI. */
         nk_glfw3_render(&glfw, NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
         glfwSwapBuffers(win);
-
+        first_frame = false;
     }
 
 
