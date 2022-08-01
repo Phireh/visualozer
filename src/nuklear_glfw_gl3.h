@@ -13,6 +13,26 @@
 #ifndef NK_GLFW_GL3_H_
 #define NK_GLFW_GL3_H_
 
+/** Custom code start **/
+
+typedef enum {
+    MOUSE_LEFT_CLICK  = (1 << 0),
+    MOUSE_RIGHT_CLICK = (1 << 1)
+} mouse_state_t;
+
+typedef struct {
+    /* Current position */
+    int32_t x;
+    int32_t y;
+    /* Last position */
+    int32_t lx;
+    int32_t ly;
+    mouse_state_t state;
+} mouse_input_t;
+
+
+/** Custom code end **/
+
 #include <GLFW/glfw3.h>
 
 enum nk_glfw_init_state{
@@ -85,6 +105,15 @@ NK_API void                 nk_glfw3_mouse_button_callback(GLFWwindow *win, int 
 #ifndef NK_GLFW_DOUBLE_CLICK_HI
 #define NK_GLFW_DOUBLE_CLICK_HI 0.2
 #endif
+
+/** Custom code start **/
+static mouse_input_t mouse_input;
+extern int32_t mouse_drag_initial_x;
+extern int32_t mouse_drag_initial_y;
+extern int window_drag_active;
+
+/** Custom code end **/
+
 
 struct nk_glfw_vertex {
     float position[2];
@@ -332,15 +361,25 @@ nk_glfw3_mouse_button_callback(GLFWwindow* win, int button, int action, int mods
     double x, y;
     NK_UNUSED(mods);
     if (button != GLFW_MOUSE_BUTTON_LEFT) return;
+
     glfwGetCursorPos(win, &x, &y);
     if (action == GLFW_PRESS)  {
+        mouse_input.state |= MOUSE_LEFT_CLICK;
+        mouse_drag_initial_x = (uint32_t)x;
+        mouse_drag_initial_y = (uint32_t)y;
+        window_drag_active = 1;
+
         double dt = glfwGetTime() - glfw->last_button_click;
         if (dt > NK_GLFW_DOUBLE_CLICK_LO && dt < NK_GLFW_DOUBLE_CLICK_HI) {
             glfw->is_double_click_down = nk_true;
             glfw->double_click_pos = nk_vec2((float)x, (float)y);
         }
         glfw->last_button_click = glfwGetTime();
-    } else glfw->is_double_click_down = nk_false;
+    } else {
+        glfw->is_double_click_down = nk_false;
+        mouse_input.state &= ~MOUSE_LEFT_CLICK;
+        window_drag_active = 0;
+    }
 }
 
 NK_INTERN void
@@ -446,7 +485,7 @@ nk_glfw3_new_frame(struct nk_glfw* glfw)
     nk_input_key(ctx, NK_KEY_SCROLL_DOWN, glfwGetKey(win, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS);
     nk_input_key(ctx, NK_KEY_SCROLL_UP, glfwGetKey(win, GLFW_KEY_PAGE_UP) == GLFW_PRESS);
     nk_input_key(ctx, NK_KEY_SHIFT, glfwGetKey(win, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS||
-                                    glfwGetKey(win, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+                                     glfwGetKey(win, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
 
     if (glfwGetKey(win, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
         glfwGetKey(win, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) {

@@ -1,6 +1,9 @@
 /* STDLIB includes */
+#include <math.h>
 #include <stdio.h>
 #include <getopt.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
 /* Misc. includes */
 #ifdef __linux__

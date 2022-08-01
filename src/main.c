@@ -1,24 +1,26 @@
 //#include "main.h"
-#include <stdbool.h>
+
+
+/* Custom types */
+
 
 /* Global vars */
 const int32_t default_width = 1024;
 const int32_t default_height = 720;
 
-typedef enum {
-    MOUSE_LEFT_CLICK  = (1 << 0),
-    MOUSE_RIGHT_CLICK = (1 << 1)
-} mouse_state_t;
+static double cursor_pos_x = 0;
+static double cursor_pos_y = 0;
+static double delta_x = 0;
+static double delta_y = 0;
 
-typedef struct {
-    /* Current position */
-    double x;
-    double y;
-    /* Last position */
-    double lx;
-    double ly;
-    uint32_t state;
-} mouse_input_t;
+int window_drag_active;
+int32_t mouse_drag_initial_x;
+int32_t mouse_drag_initial_y;
+
+/* Global variables */
+
+bool dragging_window = false;
+GLFWwindow *win = NULL;
 
 
 // TODO: Make a nicer error callback for glfw
@@ -140,7 +142,6 @@ int main(int argc, char *argv[])
 
     /* Platform vars */
     struct nk_glfw glfw = {0};
-    static GLFWwindow *win;
     int width = 0, height = 0;
     struct nk_context *ctx;
     struct nk_colorf bg;
@@ -166,7 +167,9 @@ int main(int argc, char *argv[])
     win = glfwCreateWindow(default_width, default_height, "Visualozer", NULL, NULL);
     glfwMakeContextCurrent(win);
     glfwGetWindowSize(win, &width, &height);
-
+    //glfwSetCursorPosCallback(win, cursor_position_callback);
+    //if (!glfwSetMouseButtonCallback(win, mouse_button_callback))
+    //    fprintf(stderr, "Error setting mouse button callback\n");
 
     /* Get openGL context */
 
@@ -195,23 +198,16 @@ int main(int argc, char *argv[])
 
 
     bool first_frame = true;
-    mouse_input_t mouse_input = {};
+    mouse_input = (const mouse_input_t){0};
 
     while (!glfwWindowShouldClose(win))
     {
         /* Input */
-        glfwPollEvents();
-        mouse_input.lx = mouse_input.x;
-        mouse_input.ly = mouse_input.y;
-
-        glfwGetCursorPos(win, &mouse_input.x, &mouse_input.y);
-
+        glfwWaitEvents();
         if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
             mouse_input.state |= MOUSE_LEFT_CLICK;
         else
             mouse_input.state &= ~MOUSE_LEFT_CLICK;
-
-
 
         /* GUI */
         if (first_frame || !nk_window_is_closed(ctx, "WIP"))
@@ -228,36 +224,31 @@ int main(int argc, char *argv[])
                     nk_label(ctx, "File picker goes here", NK_TEXT_LEFT);
                     nk_tree_pop(ctx);
                 }
+
+
             }
             else
             {
                 goto cleanup_and_exit;
             }
 
-            if (nk_window_is_hovered(ctx))
+            // TODO: Make this read nuklear's style struct instead of hardcoding the 30px border
+            if (window_drag_active && mouse_drag_initial_y <= 30)
             {
-                struct nk_rect actual_bounds = ctx->current->bounds;
-                actual_bounds.h = ctx->current->layout->header_height;
+                double xpos, ypos;
+                glfwGetCursorPos(win, &xpos, &ypos);
 
-                if (nk_input_is_mouse_hovering_rect(&ctx->input, actual_bounds) &&
-                    mouse_input.state & MOUSE_LEFT_CLICK)
-                {
-                    double dx = mouse_input.x - mouse_input.lx;
-                    double dy = mouse_input.y - mouse_input.ly;
-                    int32_t xpos, ypos;
-                    glfwGetWindowPos(win, &xpos, &ypos);
-                    glfwSetWindowPos(win, xpos + dx, ypos + dy);
-                    printf("Dragging window %.2f x %.2f y \n", dx, dy);
-                    mouse_input.x -= dx;
-                    mouse_input.y -= dy;
-                }
+                delta_x = xpos - mouse_drag_initial_x;
+                delta_y = ypos - mouse_drag_initial_y;
+
+                int x, y;
+                glfwGetWindowPos(win, &x, &y);
+                glfwSetWindowPos(win, x + delta_x, y + delta_y);
             }
+
 
             nk_end(ctx);
         }
-
-
-
 
         /* Draw */
         glfwGetWindowSize(win, &width, &height);
