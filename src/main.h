@@ -1,3 +1,6 @@
+#ifndef VISUALOZER_MAIN_H
+#define VISUALOZER_MAIN_H
+
 /* STDLIB includes */
 #include <math.h>
 #include <stdio.h>
@@ -37,3 +40,5 @@
 #define NK_KEYSTATE_BASED_INPUT
 #include "nuklear.h"
 #include "nuklear_glfw_gl3.h"
+
+#endif
