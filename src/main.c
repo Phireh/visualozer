@@ -26,9 +26,15 @@ GLFWwindow *win = NULL;
 int width;
 int height;
 
+
 struct nk_glfw glfw = {0};
 struct nk_context *ctx;
 struct nk_colorf bg;
+
+typedef struct {
+    char *filename;
+    bool print_help;
+} cli_args_t;
 
 
 // TODO: Make a nicer error callback for glfw
@@ -59,6 +65,39 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     (void)pInput;
 }
 
+int parse_args(int argc, char **argv, cli_args_t *cli_args)
+{
+    for (int i = 1; i < argc; ++i)
+    {
+        char *p = argv[i];
+        if (p[0] == '-')
+        {
+            if (p[1] == '-')
+            {
+                /* Long opts */
+            }
+            else
+            {
+                /* Short opts */
+                if (!strcmp(p, "-f"))
+                {
+                    if (i < argc - 1)
+                    {
+                        cli_args->filename = calloc(strlen(argv[i+1]), 1);
+                        strcpy(cli_args->filename, argv[++i]);
+                    }
+                    else
+                        goto error_parsing;
+                }
+            }
+        }
+    }
+
+    return 0;
+error_parsing:
+    return 1;
+}
+
 
 void print_usage()
 {
@@ -71,48 +110,19 @@ int main(int argc, char *argv[])
     // TODO: Set locale before initialization ?
 
     /* Argument parsing */
+    cli_args_t cli_args = {};
 
-    char input_file_path[PATH_MAX] = {0};
-    int help_flag = 0;
+    int errorcode = parse_args(argc, argv, &cli_args);
 
-    int c;
-
-    while (1)
-    {
-        int idx = 0;
-        struct option long_options[] = {
-            {"help", no_argument, &help_flag, 1},
-            {"file", required_argument, 0, 'f'},
-            {0,0,0,0}};
-        c = getopt_long(argc, argv, "hf:", long_options, &idx);
-        if (c == -1) break;
-
-        switch (c)
-        {
-        case 0: // long option that sets a flag
-            ;   // nothing we really wanna do here for now
-            break;
-        case 'h':
-            help_flag = 1;
-            break;
-        case 'f':
-            if (optarg)
-                strcpy(input_file_path, optarg);
-            else
-                help_flag = 1;
-            break;
-        default:
-            fprintf(stderr, "Error during argument parsing\n");
-            print_usage();
-            return -1;
-            break;
-        }
-    }
-    if (help_flag || !strlen(input_file_path))
+    if (errorcode           || // parsing failed
+        cli_args.print_help || // just print help and exit
+        !cli_args.filename)    // required args missing
     {
         print_usage();
-        return -1;
+        return errorcode;
     }
+
+    char *input_file_path = cli_args.filename;
 
     /* Initialization */
     /* TODO: this is placeholder code. Miniaudio objects have manual memory management, so we'd (probably) want to make these objects

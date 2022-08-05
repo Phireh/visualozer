@@ -1,7 +1,7 @@
 TIME=/usr/bin/time --format="Step took %Es"
 
 CC=clang
-CFLAGS= -std=c11 -Og -g
+CFLAGS= -std=c11 -g
 
 LD=clang
 LDFLAGS=-lpthread -lm
@@ -22,7 +22,7 @@ endif
 
 visualozer: $(SRCDIR)/main.h.pch.o $(SRCDIR)/main.o
 	@echo Linking...
-	$(TIME) $(LD) $(SRCDIR)/main.h.pch.o $(SRCDIR)/main.o -o visualozer $(LDFLAGS)
+	$(TIME) $(LD) $(CFLAGS) $(SRCDIR)/main.h.pch.o $(SRCDIR)/main.o -o visualozer $(LDFLAGS)
 
 $(SRCDIR)/main.o: $(SRCDIR)/main.h.pch $(SRCDIR)/main.c
 	@echo Compiling object...

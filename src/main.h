@@ -4,16 +4,8 @@
 /* STDLIB includes */
 #include <math.h>
 #include <stdio.h>
-#include <getopt.h>
 #include <stdlib.h>
 #include <stdbool.h>
-
-/* Misc. includes */
-#ifdef __linux__
-#include <linux/limits.h> // for PATH_MAX
-#else
-#include <limits.h> // TODO: check if Mac actually as PATH_MAX here
-#endif
 
 /* Miniaudio includes */
 #include "miniaudio_config.h"
