@@ -2,6 +2,8 @@
 
 /* Custom types */
 
+/* Function signatures */
+void draw_gui();
 
 /* Global vars */
 const int32_t default_width = 1024;
@@ -19,15 +21,29 @@ int32_t mouse_drag_initial_y;
 /* Global variables */
 
 bool dragging_window = false;
+bool closing_window = false;
 GLFWwindow *win = NULL;
+int width;
+int height;
+
+struct nk_glfw glfw = {0};
+struct nk_context *ctx;
+struct nk_colorf bg;
 
 
 // TODO: Make a nicer error callback for glfw
 static void error_callback(int e, const char *d)
 {
-    printf("Error %d: %s\n", e, d);
+    fprintf(stderr, "Error %d: %s\n", e, d);
 }
 
+static void window_size_callback(GLFWwindow *window, int new_width, int new_height)
+{
+    glfw.width = new_width;
+    glfw.height = new_height;
+    printf("Resizing to %d w %d h\n", glfw.width, glfw.height);
+    draw_gui();
+}
 
 
 // TODO: This is placeholder code that just outputs the sound out of the decoder, for now
@@ -140,18 +156,17 @@ int main(int argc, char *argv[])
     printf("Playing %s, press enter to quit...\n", input_file_path);
 
     /* Platform vars */
-    struct nk_glfw glfw = {0};
-    int width = 0, height = 0;
-    struct nk_context *ctx;
-    struct nk_colorf bg;
+
 
     /* GLFW initialization */
-    glfwSetErrorCallback(error_callback);
+
     if (!glfwInit())
     {
         fprintf(stderr, "Failed to initialized glfw\n");
         goto cleanup_and_exit;
     }
+    glfwSetErrorCallback(error_callback);
+
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -164,15 +179,20 @@ int main(int argc, char *argv[])
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     win = glfwCreateWindow(default_width, default_height, "Visualozer", NULL, NULL);
+
+    glfwSetWindowSizeCallback(win, window_size_callback);
+
     glfwMakeContextCurrent(win);
-    glfwGetWindowSize(win, &width, &height);
+    glfwGetWindowSize(win, &glfw.width, &glfw.height);
+
     //glfwSetCursorPosCallback(win, cursor_position_callback);
     //if (!glfwSetMouseButtonCallback(win, mouse_button_callback))
     //    fprintf(stderr, "Error setting mouse button callback\n");
 
+
     /* Get openGL context */
 
-    glViewport(0, 0, width, height);
+    glViewport(0, 0, glfw.width, glfw.height);
     glewExperimental = 1;
     if (glewInit() != GLEW_OK)
     {
@@ -196,44 +216,53 @@ int main(int argc, char *argv[])
     bg.r = 0.10f, bg.g = 0.18f, bg.b = 0.24f, bg.a = 1.0f;
 
 
-    bool first_frame = true;
-    mouse_input = (const mouse_input_t){0};
-
-    while (!glfwWindowShouldClose(win))
+    while (!glfwWindowShouldClose(win) && !closing_window)
     {
-        /* Input */
+        /* Input handling & sync */
+        mouse_input = (const mouse_input_t){0};
         glfwWaitEvents();
         if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
             mouse_input.state |= MOUSE_LEFT_CLICK;
         else
             mouse_input.state &= ~MOUSE_LEFT_CLICK;
 
-        /* GUI */
-        if (first_frame || !nk_window_is_closed(ctx, "WIP"))
+        draw_gui();
+    }
+
+cleanup_and_exit:
+    nk_glfw3_shutdown(&glfw);
+    glfwTerminate();
+    ma_device_uninit(&device);
+    ma_decoder_uninit(&decoder);
+    return 0;
+}
+
+void draw_gui()
+{
+    static bool first_frame = true;
+    static uint64_t frame = 0;
+    /* GUI */
+    if (first_frame || !nk_window_is_closed(ctx, "WIP"))
+    {
+
+        // printf("--- Drawing frame %ld ---\n glfw.width = %d\n glfw.height = %d\n", frame++, glfw.width, glfw.height);
+        nk_glfw3_new_frame(&glfw);
+        if (nk_begin(ctx, "WIP", nk_rect(0, 0, glfw.width, glfw.height),
+                     NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_CLOSABLE))
         {
-            nk_glfw3_new_frame(&glfw);
-            if (nk_begin(ctx, "WIP", nk_rect(0, 0, glfw.width, glfw.height),
-                         NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_CLOSABLE))
+
+            /* printf(" nkwsize = %f, %f\n", nkwsize.x, nkwsize.y); */
+            /* if (floor(nkwsize.x) != glfw.width || floor(nkwsize.y) != glfw.height) */
+            /* { */
+            /*     glfwSetWindowSize(win, (float)nkwsize.x, (float)nkwsize.y); */
+            /*     // Not needed anymore, callback will take care of updating these */
+            /*     glfw.width = nkwsize.x; */
+            /*     glfw.height = nkwsize.y; */
+            /* } */
+            /* else */
+                if (window_drag_active && mouse_drag_initial_y <= 30)
             {
-
-                nk_layout_row_dynamic(ctx, 25, 1);
-                if (nk_tree_push(ctx, NK_TREE_TAB, "WIP", NK_MINIMIZED))
-                {
-                    nk_layout_row_dynamic(ctx, 25, 1);
-                    nk_label(ctx, "File picker goes here", NK_TEXT_LEFT);
-                    nk_tree_pop(ctx);
-                }
-
-
-            }
-            else
-            {
-                goto cleanup_and_exit;
-            }
-
-            // TODO: Make this read nuklear's style struct instead of hardcoding the 30px border
-            if (window_drag_active && mouse_drag_initial_y <= 30)
-            {
+                // TODO: Make this read nuklear's style struct instead of hardcoding the 30px border
                 double xpos, ypos;
                 glfwGetCursorPos(win, &xpos, &ypos);
 
@@ -246,30 +275,35 @@ int main(int argc, char *argv[])
             }
 
 
-            nk_end(ctx);
+            nk_layout_row_dynamic(ctx, 25, 1);
+            if (nk_tree_push(ctx, NK_TREE_TAB, "WIP", NK_MINIMIZED))
+            {
+                nk_layout_row_dynamic(ctx, 25, 1);
+                nk_label(ctx, "File picker goes here", NK_TEXT_LEFT);
+                nk_tree_pop(ctx);
+            }
+
+        }
+        else
+        {
+            // TODO: Error handling
+            closing_window = true;
         }
 
-        /* Draw */
-        glfwGetWindowSize(win, &width, &height);
-        glViewport(0, 0, width, height);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glClearColor(bg.r, bg.g, bg.b, bg.a);
-        /* IMPORTANT: `nk_glfw_render` modifies some global OpenGL state
-         * with blending, scissor, face culling, depth test and viewport and
-         * defaults everything back into a default state.
-         * Make sure to either a.) save and restore or b.) reset your own state after
-         * rendering the UI. */
-        nk_glfw3_render(&glfw, NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
-        glfwSwapBuffers(win);
-        first_frame = false;
+        nk_end(ctx);
     }
 
+    /* Draw */
+    glViewport(0, 0, glfw.width, glfw.height);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(bg.r, bg.g, bg.b, bg.a);
+    /* IMPORTANT: `nk_glfw_render` modifies some global OpenGL state
+     * with blending, scissor, face culling, depth test and viewport and
+     * defaults everything back into a default state.
+     * Make sure to either a.) save and restore or b.) reset your own state after
+     * rendering the UI. */
+    nk_glfw3_render(&glfw, NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
+    glfwSwapBuffers(win);
+    first_frame = false;
 
-
-cleanup_and_exit:
-    nk_glfw3_shutdown(&glfw);
-    glfwTerminate();
-    ma_device_uninit(&device);
-    ma_decoder_uninit(&decoder);
-    return 0;
 }
