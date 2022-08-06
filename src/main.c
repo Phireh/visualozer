@@ -1,11 +1,39 @@
 #include "main.h"
 
 /* Custom types */
+typedef struct {
+    char *filename;
+    bool print_help;
+} cli_args_t;
+
+typedef enum {
+    FTYPE_UNKNOWN = (1 << 0),
+    FTYPE_DIR     = (1 << 1),
+    FTYPE_WAV     = (1 << 2),
+    FTYPE_MP3     = (1 << 3),
+    FTYPE_FLAC    = (1 << 4),
+    FTYPE_VORBIS  = (1 << 5),
+} filetype_t;
+
+typedef struct {
+    uint64_t samplerate;
+    uint64_t samples;
+    uint64_t bytes_per_sample;
+    uint64_t filesize;
+    filetype_t type;
+    char filename[PATH_MAX+1];
+    char author[128];
+    char album[128];
+} fileinfo_t;
 
 /* Function signatures */
 void draw_gui();
+void draw_file_picker();
+
+int list_files(char *path, filetype_t extension_mask, fileinfo_t **info);
 
 /* Global vars */
+
 const int32_t default_width = 1024;
 const int32_t default_height = 720;
 
@@ -26,15 +54,13 @@ GLFWwindow *win = NULL;
 int width;
 int height;
 
+fileinfo_t *curr_dir_files;
+size_t curr_dir_files_length;
+
 
 struct nk_glfw glfw = {0};
 struct nk_context *ctx;
 struct nk_colorf bg;
-
-typedef struct {
-    char *filename;
-    bool print_help;
-} cli_args_t;
 
 
 // TODO: Make a nicer error callback for glfw
@@ -162,6 +188,10 @@ int main(int argc, char *argv[])
         return -4;
     }
 
+    if ((curr_dir_files_length = list_files("./", 0, &curr_dir_files)) < 0)
+    {
+        fprintf(stderr, "Could not get file list.\n");
+    }
 
     printf("Playing %s, press enter to quit...\n", input_file_path);
 
@@ -270,7 +300,7 @@ void draw_gui()
             /*     glfw.height = nkwsize.y; */
             /* } */
             /* else */
-                if (window_drag_active && mouse_drag_initial_y <= 30)
+            if (window_drag_active && mouse_drag_initial_y <= 30)
             {
                 // TODO: Make this read nuklear's style struct instead of hardcoding the 30px border
                 double xpos, ypos;
@@ -283,13 +313,11 @@ void draw_gui()
                 glfwGetWindowPos(win, &x, &y);
                 glfwSetWindowPos(win, x + delta_x, y + delta_y);
             }
-
-
-            nk_layout_row_dynamic(ctx, 25, 1);
+            nk_layout_row_dynamic(ctx, 0, 1);
             if (nk_tree_push(ctx, NK_TREE_TAB, "WIP", NK_MINIMIZED))
             {
-                nk_layout_row_dynamic(ctx, 25, 1);
                 nk_label(ctx, "File picker goes here", NK_TEXT_LEFT);
+                draw_file_picker();
                 nk_tree_pop(ctx);
             }
 
@@ -316,4 +344,57 @@ void draw_gui()
     glfwSwapBuffers(win);
     first_frame = false;
 
+}
+
+void draw_file_picker()
+{
+    nk_layout_row_dynamic(ctx, 500, 1);
+    if (nk_group_begin(ctx, "File Picker", NK_WINDOW_BORDER))
+    {
+        for (size_t i = 0; i < curr_dir_files_length; ++i)
+        {
+            nk_layout_row_begin(ctx, NK_DYNAMIC, 0, 2);
+            nk_layout_row_push(ctx, 0.25f);
+            nk_label(ctx, curr_dir_files[i].filename, NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, 0.75f);
+            nk_label(ctx, "Column 2", NK_TEXT_LEFT);
+            nk_layout_row_end(ctx);
+        }
+
+        nk_group_end(ctx);
+    }
+}
+
+/* Fills a fileinfo_t array with file properties. Also takes care of reserving
+   the memory for such array. The starting position of the array is stored at
+   *info.
+
+  Return code: the number of files found, or a negative number on error */
+int list_files(char *path, filetype_t extension_mask, fileinfo_t **info)
+{
+    DIR *dir = opendir(path);
+    struct dirent *ent;
+    int retvalue = 0;
+
+    if (dir)
+    {
+        while ((ent = readdir(dir)))
+        {
+            // Ignore the current dir symlink as it is useless for our program
+            if (!strcmp(ent->d_name, ".")) continue;
+
+            // TODO: Use extension_mask to filter unwanted files
+
+            ++retvalue;
+            *info = realloc(*info, sizeof(fileinfo_t) * retvalue);
+            fileinfo_t *fi = (*info) + retvalue - 1;
+            strcpy(fi->filename, ent->d_name);
+        }
+        closedir(dir);
+        return retvalue;
+    }
+    else
+    {
+        return -1;
+    }
 }
