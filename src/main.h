@@ -10,6 +10,7 @@
 #ifdef __linux__
 #include <dirent.h>
 #include <linux/limits.h>
+#include <sys/stat.h>
 #endif
 
 /* Miniaudio includes */

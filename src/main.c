@@ -31,6 +31,7 @@ void draw_gui();
 void draw_file_picker();
 
 int list_files(char *path, filetype_t extension_mask, fileinfo_t **info);
+bool str_ends_with(const char *haystack, const char *needle);
 
 /* Global vars */
 
@@ -188,7 +189,7 @@ int main(int argc, char *argv[])
         return -4;
     }
 
-    if ((curr_dir_files_length = list_files("./", 0, &curr_dir_files)) < 0)
+    if ((curr_dir_files_length = list_files("./", ~0 & ~FTYPE_UNKNOWN, &curr_dir_files)) < 0)
     {
         fprintf(stderr, "Could not get file list.\n");
     }
@@ -369,32 +370,62 @@ void draw_file_picker()
    the memory for such array. The starting position of the array is stored at
    *info.
 
-  Return code: the number of files found, or a negative number on error */
+  Return code: the number of files found, or a negative number on error
+  TODO: Cache / filesystem watch the result of this function
+*/
 int list_files(char *path, filetype_t extension_mask, fileinfo_t **info)
 {
     DIR *dir = opendir(path);
     struct dirent *ent;
     int retvalue = 0;
 
-    if (dir)
+    if (!dir) return -1;
+
+    while ((ent = readdir(dir)))
     {
-        while ((ent = readdir(dir)))
+        bool file_accepted = false;
+
+        // Ignore the current dir symlink as it is useless for our program
+        if (!strcmp(ent->d_name, ".")) file_accepted = false;
+
+        if (extension_mask & FTYPE_DIR)
         {
-            // Ignore the current dir symlink as it is useless for our program
-            if (!strcmp(ent->d_name, ".")) continue;
-
-            // TODO: Use extension_mask to filter unwanted files
-
-            ++retvalue;
-            *info = realloc(*info, sizeof(fileinfo_t) * retvalue);
-            fileinfo_t *fi = (*info) + retvalue - 1;
-            strcpy(fi->filename, ent->d_name);
+            if (!strcmp(ent->d_name, "..")) file_accepted = true;
+            else
+            {
+                // Query filesystem to know if the file is actually a directory
+                struct stat fstats;
+                stat(ent->d_name, &fstats);
+                if (S_ISDIR(fstats.st_mode))
+                    file_accepted = true;
+            }
         }
-        closedir(dir);
-        return retvalue;
+
+        // Use extension_mask to filter unwanted files
+        if ((extension_mask & FTYPE_WAV) && str_ends_with(ent->d_name, ".wav")) file_accepted = true;
+        if ((extension_mask & FTYPE_MP3) && str_ends_with(ent->d_name, ".mp3")) file_accepted = true;
+        if ((extension_mask & FTYPE_FLAC) && str_ends_with(ent->d_name, ".flac")) file_accepted = true;
+        if ((extension_mask & FTYPE_VORBIS) && str_ends_with(ent->d_name, ".ogg")) file_accepted = true;
+
+
+        if (!file_accepted) continue;
+
+        // TODO: Fill struct completely
+
+        ++retvalue;
+        *info = realloc(*info, sizeof(fileinfo_t) * retvalue);
+        fileinfo_t *fi = (*info) + retvalue - 1;
+        strcpy(fi->filename, ent->d_name);
     }
-    else
-    {
-        return -1;
-    }
+    closedir(dir);
+    return retvalue;
+}
+
+bool str_ends_with(const char *haystack, const char *needle)
+{
+    size_t needle_length = strlen(needle);
+    size_t haystack_length = strlen(haystack);
+    char *p = strstr(haystack, needle);
+
+    return (p && (haystack + haystack_length) - p == (ptrdiff_t)needle_length);
 }
