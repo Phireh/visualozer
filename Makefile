@@ -1,7 +1,7 @@
 TIME=/usr/bin/time --format="Step took %Es"
 
 CC=clang
-CFLAGS= -std=c11 -g
+CFLAGS=-std=gnu11 -g -Wall -Wextra
 
 LD=clang
 LDFLAGS=-lpthread -lm

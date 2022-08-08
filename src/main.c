@@ -15,6 +15,8 @@ typedef enum {
     FTYPE_VORBIS  = (1 << 5),
 } filetype_t;
 
+const filetype_t FTYPE_AUDIO = FTYPE_WAV | FTYPE_MP3 | FTYPE_FLAC | FTYPE_VORBIS;
+
 typedef struct {
     uint64_t samplerate;
     uint64_t samples;
@@ -31,6 +33,9 @@ void draw_gui();
 void draw_file_picker();
 int get_current_dir(char *dest);
 int enter_directory(char *relpath);
+bool open_music_file(char *relpath);
+int absolute_path(char *dest, const char *relpath);
+bool path_is_absolute(char *path);
 
 int list_files(char *path, filetype_t extension_mask, fileinfo_t **info);
 bool str_ends_with(const char *haystack, const char *needle);
@@ -65,6 +70,11 @@ char topdir[PATH_MAX+1] = ".";
 struct nk_glfw glfw = {0};
 struct nk_context *ctx;
 struct nk_colorf bg;
+
+/* Miniaudio globals */
+ma_decoder decoder;
+ma_device_config device_conf;
+ma_device device;
 
 
 // TODO: Make a nicer error callback for glfw
@@ -165,38 +175,37 @@ int main(int argc, char *argv[])
        globals or heap-allocate them, depending on their size. */
 
     //ma_result result;
-    ma_decoder decoder;
-    ma_device_config device_conf;
-    ma_device device;
-
-    if (ma_decoder_init_file(input_file_path, NULL, &decoder))
-    {
-        fprintf(stderr, "Error trying to open file %s\n", input_file_path);
-        return -2;
-    }
-
-    device_conf = ma_device_config_init(ma_device_type_playback);
-    device_conf.playback.format = decoder.outputFormat;
-    device_conf.playback.channels = decoder.outputChannels;
-    device_conf.sampleRate = decoder.outputSampleRate;
-    device_conf.dataCallback = data_callback;
-    device_conf.pUserData = &decoder;
-
-    if (ma_device_init(NULL, &device_conf, &device) != MA_SUCCESS)
-    {
-        fprintf(stderr, "Failed to open playback device.\n");
-        ma_decoder_uninit(&decoder);
-        return -3;
-    }
 
 
-    if (ma_device_start(&device) != MA_SUCCESS)
-    {
-        fprintf(stderr, "Failed to start playback device.\n");
-        ma_device_uninit(&device);
-        ma_decoder_uninit(&decoder);
-        return -4;
-    }
+    /* if (ma_decoder_init_file(input_file_path, NULL, &decoder)) */
+    /* { */
+    /*     fprintf(stderr, "Error trying to open file %s\n", input_file_path); */
+    /*     return -2; */
+    /* } */
+
+    /* device_conf = ma_device_config_init(ma_device_type_playback); */
+    /* device_conf.playback.format = decoder.outputFormat; */
+    /* device_conf.playback.channels = decoder.outputChannels; */
+    /* device_conf.sampleRate = decoder.outputSampleRate; */
+    /* device_conf.dataCallback = data_callback; */
+    /* device_conf.pUserData = &decoder; */
+
+    /* if (ma_device_init(NULL, &device_conf, &device) != MA_SUCCESS) */
+    /* { */
+    /*     fprintf(stderr, "Failed to open playback device.\n"); */
+    /*     ma_decoder_uninit(&decoder); */
+    /*     return -3; */
+    /* } */
+
+
+    /* if (ma_device_start(&device) != MA_SUCCESS) */
+    /* { */
+    /*     fprintf(stderr, "Failed to start playback device.\n"); */
+    /*     ma_device_uninit(&device); */
+    /*     ma_decoder_uninit(&decoder); */
+    /*     return -4; */
+    /* } */
+    open_music_file(input_file_path);
 
     if ((curr_dir_files_length = list_files("./", ~0 & ~FTYPE_UNKNOWN, &curr_dir_files)) < 0)
     {
@@ -356,11 +365,14 @@ void draw_gui()
 
 }
 
+// TODO: Alphabetical / datestamp ordering of files
 void draw_file_picker()
 {
     nk_layout_row_dynamic(ctx, 500, 1);
     if (nk_group_begin(ctx, "File Picker", NK_WINDOW_BORDER))
     {
+        nk_layout_row_dynamic(ctx, 30, 1);
+        nk_label(ctx, topdir, NK_TEXT_LEFT);
         nk_layout_row_begin(ctx, NK_DYNAMIC, 0, 2);
         nk_layout_row_push(ctx, 0.25f);
         nk_label(ctx, "Name", NK_TEXT_CENTERED);
@@ -374,19 +386,30 @@ void draw_file_picker()
             nk_layout_row_push(ctx, 0.25f);
             if (nk_button_label(ctx, curr_dir_files[i].filename))
             {
-                enter_directory(curr_dir_files[i].filename);
-                //fprintf(stdout, "topdir: %s\n", topdir);
-                free(curr_dir_files);
-                curr_dir_files = NULL;
-                if ((curr_dir_files_length = list_files(topdir, ~0 & ~FTYPE_UNKNOWN, &curr_dir_files)) < 0)
+                if (curr_dir_files[i].type & FTYPE_DIR)
                 {
-                    fprintf(stderr, "Could not get file list.\n");
-
+                    /* If clicked file is a directory, try to get inside */
+                    enter_directory(curr_dir_files[i].filename);
+                    //fprintf(stdout, "topdir: %s\n", topdir);
+                    free(curr_dir_files);
+                    curr_dir_files = NULL;
+                    if ((curr_dir_files_length = list_files(topdir, ~0 & ~FTYPE_UNKNOWN, &curr_dir_files)) < 0)
+                    {
+                        fprintf(stderr, "Could not get file list.\n");
+                    }
+                    else
+                    {
+                        nk_layout_row_end(ctx);
+                        goto early_exit_picker;
+                    }
                 }
-                else
+                else if (curr_dir_files[i].type & FTYPE_AUDIO)
                 {
-                    nk_layout_row_end(ctx);
-                    goto early_exit_picker;
+                    char filepath[PATH_MAX+1];
+                    strcpy(filepath, topdir);
+                    strcat(filepath, "/");
+                    strcat(filepath, curr_dir_files[i].filename);
+                    open_music_file(filepath);
                 }
             }
             nk_layout_row_push(ctx, 0.75f);
@@ -472,11 +495,7 @@ int enter_directory(char *relpath)
     strcpy(aux, topdir);
     strcat(aux, "/");
     strcat(aux, relpath);
-    char *p = realpath(aux, topdir);
-    if (!p)
-        return errno;
-    else
-        return 0;
+    return absolute_path(topdir, aux);
 }
 
 bool str_ends_with(const char *haystack, const char *needle)
@@ -495,4 +514,72 @@ int get_current_dir(char *destination)
         return errno;
     else
         return 0;
+}
+
+int absolute_path(char *dest, const char *relpath)
+{
+    char *p = realpath(relpath, dest);
+    if (!p)
+        return errno;
+    else
+        return 0;
+}
+
+bool path_is_absolute(char *path)
+{
+    return path[0] == '/';
+}
+
+bool open_music_file(char *path)
+{
+    char truepath[PATH_MAX];
+    ma_result errcode;
+    if (path_is_absolute(path))
+    {
+        strcpy(truepath, path);
+    }
+    else
+    {
+        // TODO: Error checking
+        absolute_path(truepath, path);
+    }
+
+    /* NOTE: When creating a MA device, its config is immutable. We may be able to reuse it if the decoder config
+       is identical but creating a new one seems saner. */
+    ma_device_uninit(&device);
+
+    if (ma_decoder_uninit(&decoder))
+    {
+        fprintf(stderr, "Error trying to free MA decoder\n");
+        return false;
+    }
+
+    if ((errcode = ma_decoder_init_file(truepath, NULL, &decoder)) != MA_SUCCESS)
+    {
+        fprintf(stderr, "Error trying to open decoder for file %s\nERRCODE: %d\n", truepath, errcode);
+        return false;
+    }
+
+    device_conf = ma_device_config_init(ma_device_type_playback);
+    device_conf.playback.format = decoder.outputFormat;
+    device_conf.playback.channels = decoder.outputChannels;
+    device_conf.sampleRate = decoder.outputSampleRate;
+    device_conf.dataCallback = data_callback;
+    device_conf.pUserData = &decoder;
+
+    if (ma_device_init(NULL, &device_conf, &device) != MA_SUCCESS)
+    {
+        fprintf(stderr, "Failed to open playback device.\n");
+        ma_decoder_uninit(&decoder);
+        return false;
+    }
+
+    if (ma_device_start(&device) != MA_SUCCESS)
+    {
+        fprintf(stderr, "Failed to start playback device.\n");
+        ma_device_uninit(&device);
+        ma_decoder_uninit(&decoder);
+        return false;
+    }
+    return true;
 }

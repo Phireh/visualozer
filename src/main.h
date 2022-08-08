@@ -4,7 +4,6 @@
 /* STDLIB includes */
 #include <math.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdbool.h>
 
 
@@ -20,7 +19,9 @@
 #include "miniaudio_config.h"
 #define MINIAUDIO_IMPLEMENTATION
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function" // ignore spureous warnings from 3rd party libs
+// ignore spureous warnings from 3rd party libs
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #include "miniaudio.h"
 #pragma GCC diagnostic pop
 
