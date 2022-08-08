@@ -1,60 +1,28 @@
 #include "main.h"
 
-/* Custom types */
-typedef struct {
-    char *filename;
-    bool print_help;
-} cli_args_t;
-
-typedef enum {
-    FTYPE_UNKNOWN = (1 << 0),
-    FTYPE_DIR     = (1 << 1),
-    FTYPE_WAV     = (1 << 2),
-    FTYPE_MP3     = (1 << 3),
-    FTYPE_FLAC    = (1 << 4),
-    FTYPE_VORBIS  = (1 << 5),
-} filetype_t;
-
-const filetype_t FTYPE_AUDIO = FTYPE_WAV | FTYPE_MP3 | FTYPE_FLAC | FTYPE_VORBIS;
-
-typedef struct {
-    uint64_t samplerate;
-    uint64_t samples;
-    uint64_t bytes_per_sample;
-    uint64_t filesize;
-    filetype_t type;
-    char filename[PATH_MAX+1];
-    char author[128];
-    char album[128];
-} fileinfo_t;
-
-/* Function signatures */
+/* in-file function signatures */
 void draw_gui();
 void draw_file_picker();
-int get_current_dir(char *dest);
 int enter_directory(char *relpath);
 bool open_music_file(char *relpath);
-int absolute_path(char *dest, const char *relpath);
-bool path_is_absolute(char *path);
+
 
 int list_files(char *path, filetype_t extension_mask, fileinfo_t **info);
 bool str_ends_with(const char *haystack, const char *needle);
 
 /* Global vars */
 
+const filetype_t FTYPE_AUDIO = FTYPE_WAV | FTYPE_MP3 | FTYPE_FLAC | FTYPE_VORBIS;
+
 const int32_t default_width = 1024;
 const int32_t default_height = 720;
 
-static double cursor_pos_x = 0;
-static double cursor_pos_y = 0;
 static double delta_x = 0;
 static double delta_y = 0;
 
 int window_drag_active;
 int32_t mouse_drag_initial_x;
 int32_t mouse_drag_initial_y;
-
-/* Global variables */
 
 bool dragging_window = false;
 bool closing_window = false;
@@ -83,7 +51,7 @@ static void error_callback(int e, const char *d)
     fprintf(stderr, "Error %d: %s\n", e, d);
 }
 
-static void window_size_callback(GLFWwindow *window, int new_width, int new_height)
+static void window_size_callback(__attribute__((unused))GLFWwindow *window, int new_width, int new_height)
 {
     glfw.width = new_width;
     glfw.height = new_height;
@@ -298,10 +266,9 @@ cleanup_and_exit:
 
 void draw_gui()
 {
-    static bool first_frame = true;
     static uint64_t frame = 0;
     /* GUI */
-    if (first_frame || !nk_window_is_closed(ctx, "WIP"))
+    if (!frame++ || !nk_window_is_closed(ctx, "WIP"))
     {
 
         // printf("--- Drawing frame %ld ---\n glfw.width = %d\n glfw.height = %d\n", frame++, glfw.width, glfw.height);
@@ -361,8 +328,6 @@ void draw_gui()
      * rendering the UI. */
     nk_glfw3_render(&glfw, NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
     glfwSwapBuffers(win);
-    first_frame = false;
-
 }
 
 // TODO: Alphabetical / datestamp ordering of files
@@ -422,72 +387,7 @@ void draw_file_picker()
     }
 }
 
-/* Fills a fileinfo_t array with file properties. Also takes care of reserving
-   the memory for such array. The starting position of the array is stored at
-   *info.
 
-  Return code: the number of files found, or a negative number on error
-  TODO: Cache / filesystem watch the result of this function
-*/
-int list_files(char *path, filetype_t extension_mask, fileinfo_t **info)
-{
-    DIR *dir = opendir(path);
-    struct dirent *ent;
-    int retvalue = 0;
-
-    if (!dir) return -1;
-
-    int c = 0;
-
-    while ((ent = readdir(dir)))
-    {
-        //fprintf(stdout, "Test %d with file %s\n", ++c, ent->d_name);
-        bool file_accepted = false;
-        filetype_t ftype = FTYPE_UNKNOWN;
-
-        // Ignore the current dir symlink as it is useless for our program
-        if (!strcmp(ent->d_name, ".")) continue;
-
-        if (extension_mask & FTYPE_DIR)
-        {
-            if (!strcmp(ent->d_name, "..")) ftype = FTYPE_DIR;
-            else
-            {
-                // Query filesystem to know if the file is actually a directory
-                struct stat fstats;
-                char fullpath[PATH_MAX+1] = {0};
-                strcpy(fullpath, topdir);
-                strcat(fullpath, "/");
-                strcat(fullpath, ent->d_name);
-                if (stat(fullpath, &fstats))
-                    fprintf(stderr, "Could not query info about file %s\n", ent->d_name);
-                if (S_ISDIR(fstats.st_mode))
-                    ftype = FTYPE_DIR;
-            }
-        }
-
-        // Use extension_mask to filter unwanted files
-        if ((extension_mask & FTYPE_WAV) && str_ends_with(ent->d_name, ".wav")) ftype = FTYPE_WAV;
-        if ((extension_mask & FTYPE_MP3) && str_ends_with(ent->d_name, ".mp3")) ftype = FTYPE_MP3;
-        if ((extension_mask & FTYPE_FLAC) && str_ends_with(ent->d_name, ".flac")) ftype = FTYPE_FLAC;
-        if ((extension_mask & FTYPE_VORBIS) && str_ends_with(ent->d_name, ".ogg")) ftype = FTYPE_VORBIS;
-
-
-        if (!(ftype & extension_mask)) continue;
-
-        // TODO: Fill struct completely
-
-        ++retvalue;
-        *info = realloc(*info, sizeof(fileinfo_t) * retvalue);
-        fileinfo_t *fi = (*info) + retvalue - 1;
-        // Zero-initialize for sanity
-        *fi = (fileinfo_t){0};
-        strcpy(fi->filename, ent->d_name);
-        fi->type = ftype;
-    }
-    closedir(dir);
-    return retvalue;
-}
 
 int enter_directory(char *relpath)
 {
@@ -496,38 +396,6 @@ int enter_directory(char *relpath)
     strcat(aux, "/");
     strcat(aux, relpath);
     return absolute_path(topdir, aux);
-}
-
-bool str_ends_with(const char *haystack, const char *needle)
-{
-    size_t needle_length = strlen(needle);
-    size_t haystack_length = strlen(haystack);
-    char *p = strstr(haystack, needle);
-
-    return (p && (haystack + haystack_length) - p == (ptrdiff_t)needle_length);
-}
-
-int get_current_dir(char *destination)
-{
-    char *p = getcwd(destination, PATH_MAX+1);
-    if (!p)
-        return errno;
-    else
-        return 0;
-}
-
-int absolute_path(char *dest, const char *relpath)
-{
-    char *p = realpath(relpath, dest);
-    if (!p)
-        return errno;
-    else
-        return 0;
-}
-
-bool path_is_absolute(char *path)
-{
-    return path[0] == '/';
 }
 
 bool open_music_file(char *path)

@@ -7,14 +7,6 @@
 #include <stdbool.h>
 
 
-#ifdef __linux__
-#include <dirent.h>
-#include <linux/limits.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <stdlib.h>
-#endif
-
 /* Miniaudio includes */
 #include "miniaudio_config.h"
 #define MINIAUDIO_IMPLEMENTATION
@@ -42,5 +34,17 @@
 #define NK_KEYSTATE_BASED_INPUT
 #include "nuklear.h"
 #include "nuklear_glfw_gl3.h"
+
+
+/* Custom types */
+#include "types.h"
+
+/* Platform API */
+#include "platform.h"
+
+/* Platform-dependent implementations */
+#ifdef __linux__
+#include "linux_platform.h"
+#endif
 
 #endif

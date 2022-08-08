@@ -32,7 +32,7 @@ $(SRCDIR)/main.h.pch.o: $(SRCDIR)/main.h.pch
 	@echo Compiling PCH...
 	$(TIME) $(CC) -c -o $(SRCDIR)/main.h.pch.o $(CFLAGS) $(SRCDIR)/main.h.pch
 
-$(SRCDIR)/main.h.pch: $(SRCDIR)/main.h $(SRCDIR)/nuklear.h $(SRCDIR)/nuklear_glfw_gl3.h $(SRCDIR)/miniaudio.h
+$(SRCDIR)/main.h.pch: $(SRCDIR)/main.h $(SRCDIR)/nuklear.h $(SRCDIR)/nuklear_glfw_gl3.h $(SRCDIR)/miniaudio.h $(SRCDIR)/types.h $(SRCDIR)/linux_platform.h $(SRCDIR)/common.h
 	@echo Generating PCH...
 	$(TIME) $(CC) $(GENPCH_FLAGS) $(SRCDIR)/main.h $(CFLAGS) -o $(SRCDIR)/main.h.pch
 
