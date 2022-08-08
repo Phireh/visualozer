@@ -7,10 +7,13 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+
 #ifdef __linux__
 #include <dirent.h>
 #include <linux/limits.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <stdlib.h>
 #endif
 
 /* Miniaudio includes */

@@ -29,6 +29,8 @@ typedef struct {
 /* Function signatures */
 void draw_gui();
 void draw_file_picker();
+int get_current_dir(char *dest);
+int enter_directory(char *relpath);
 
 int list_files(char *path, filetype_t extension_mask, fileinfo_t **info);
 bool str_ends_with(const char *haystack, const char *needle);
@@ -57,6 +59,7 @@ int height;
 
 fileinfo_t *curr_dir_files;
 size_t curr_dir_files_length;
+char topdir[PATH_MAX+1] = ".";
 
 
 struct nk_glfw glfw = {0};
@@ -147,6 +150,12 @@ int main(int argc, char *argv[])
     {
         print_usage();
         return errorcode;
+    }
+
+    if (get_current_dir(topdir))
+    {
+        // TODO: Better error handling
+        fprintf(stderr, "Could not read CWD\n");
     }
 
     char *input_file_path = cli_args.filename;
@@ -352,16 +361,40 @@ void draw_file_picker()
     nk_layout_row_dynamic(ctx, 500, 1);
     if (nk_group_begin(ctx, "File Picker", NK_WINDOW_BORDER))
     {
+        nk_layout_row_begin(ctx, NK_DYNAMIC, 0, 2);
+        nk_layout_row_push(ctx, 0.25f);
+        nk_label(ctx, "Name", NK_TEXT_CENTERED);
+        nk_layout_row_push(ctx, 0.75f);
+        nk_label(ctx, "Placeholder", NK_TEXT_LEFT);
+        nk_layout_row_end(ctx);
+
         for (size_t i = 0; i < curr_dir_files_length; ++i)
         {
             nk_layout_row_begin(ctx, NK_DYNAMIC, 0, 2);
             nk_layout_row_push(ctx, 0.25f);
-            nk_label(ctx, curr_dir_files[i].filename, NK_TEXT_LEFT);
+            if (nk_button_label(ctx, curr_dir_files[i].filename))
+            {
+                enter_directory(curr_dir_files[i].filename);
+                //fprintf(stdout, "topdir: %s\n", topdir);
+                free(curr_dir_files);
+                curr_dir_files = NULL;
+                if ((curr_dir_files_length = list_files(topdir, ~0 & ~FTYPE_UNKNOWN, &curr_dir_files)) < 0)
+                {
+                    fprintf(stderr, "Could not get file list.\n");
+
+                }
+                else
+                {
+                    nk_layout_row_end(ctx);
+                    goto early_exit_picker;
+                }
+            }
             nk_layout_row_push(ctx, 0.75f);
             nk_label(ctx, "Column 2", NK_TEXT_LEFT);
             nk_layout_row_end(ctx);
         }
 
+    early_exit_picker:
         nk_group_end(ctx);
     }
 }
@@ -381,44 +414,69 @@ int list_files(char *path, filetype_t extension_mask, fileinfo_t **info)
 
     if (!dir) return -1;
 
+    int c = 0;
+
     while ((ent = readdir(dir)))
     {
+        //fprintf(stdout, "Test %d with file %s\n", ++c, ent->d_name);
         bool file_accepted = false;
+        filetype_t ftype = FTYPE_UNKNOWN;
 
         // Ignore the current dir symlink as it is useless for our program
-        if (!strcmp(ent->d_name, ".")) file_accepted = false;
+        if (!strcmp(ent->d_name, ".")) continue;
 
         if (extension_mask & FTYPE_DIR)
         {
-            if (!strcmp(ent->d_name, "..")) file_accepted = true;
+            if (!strcmp(ent->d_name, "..")) ftype = FTYPE_DIR;
             else
             {
                 // Query filesystem to know if the file is actually a directory
                 struct stat fstats;
-                stat(ent->d_name, &fstats);
+                char fullpath[PATH_MAX+1] = {0};
+                strcpy(fullpath, topdir);
+                strcat(fullpath, "/");
+                strcat(fullpath, ent->d_name);
+                if (stat(fullpath, &fstats))
+                    fprintf(stderr, "Could not query info about file %s\n", ent->d_name);
                 if (S_ISDIR(fstats.st_mode))
-                    file_accepted = true;
+                    ftype = FTYPE_DIR;
             }
         }
 
         // Use extension_mask to filter unwanted files
-        if ((extension_mask & FTYPE_WAV) && str_ends_with(ent->d_name, ".wav")) file_accepted = true;
-        if ((extension_mask & FTYPE_MP3) && str_ends_with(ent->d_name, ".mp3")) file_accepted = true;
-        if ((extension_mask & FTYPE_FLAC) && str_ends_with(ent->d_name, ".flac")) file_accepted = true;
-        if ((extension_mask & FTYPE_VORBIS) && str_ends_with(ent->d_name, ".ogg")) file_accepted = true;
+        if ((extension_mask & FTYPE_WAV) && str_ends_with(ent->d_name, ".wav")) ftype = FTYPE_WAV;
+        if ((extension_mask & FTYPE_MP3) && str_ends_with(ent->d_name, ".mp3")) ftype = FTYPE_MP3;
+        if ((extension_mask & FTYPE_FLAC) && str_ends_with(ent->d_name, ".flac")) ftype = FTYPE_FLAC;
+        if ((extension_mask & FTYPE_VORBIS) && str_ends_with(ent->d_name, ".ogg")) ftype = FTYPE_VORBIS;
 
 
-        if (!file_accepted) continue;
+        if (!(ftype & extension_mask)) continue;
 
         // TODO: Fill struct completely
 
         ++retvalue;
         *info = realloc(*info, sizeof(fileinfo_t) * retvalue);
         fileinfo_t *fi = (*info) + retvalue - 1;
+        // Zero-initialize for sanity
+        *fi = (fileinfo_t){0};
         strcpy(fi->filename, ent->d_name);
+        fi->type = ftype;
     }
     closedir(dir);
     return retvalue;
+}
+
+int enter_directory(char *relpath)
+{
+    char aux[PATH_MAX+1];
+    strcpy(aux, topdir);
+    strcat(aux, "/");
+    strcat(aux, relpath);
+    char *p = realpath(aux, topdir);
+    if (!p)
+        return errno;
+    else
+        return 0;
 }
 
 bool str_ends_with(const char *haystack, const char *needle)
@@ -428,4 +486,13 @@ bool str_ends_with(const char *haystack, const char *needle)
     char *p = strstr(haystack, needle);
 
     return (p && (haystack + haystack_length) - p == (ptrdiff_t)needle_length);
+}
+
+int get_current_dir(char *destination)
+{
+    char *p = getcwd(destination, PATH_MAX+1);
+    if (!p)
+        return errno;
+    else
+        return 0;
 }
