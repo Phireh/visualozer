@@ -109,7 +109,7 @@ error_parsing:
 
 void print_usage()
 {
-    printf("Usage: visualozer -f <file>\n");
+    printf("Usage: visualozer [-f <file>]\n");
 }
 
 
@@ -122,9 +122,7 @@ int main(int argc, char *argv[])
 
     int errorcode = parse_args(argc, argv, &cli_args);
 
-    if (errorcode           || // parsing failed
-        cli_args.print_help || // just print help and exit
-        !cli_args.filename)    // required args missing
+    if (errorcode || cli_args.print_help)   // just print help and exit
     {
         print_usage();
         return errorcode;
@@ -136,54 +134,18 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Could not read CWD\n");
     }
 
-    char *input_file_path = cli_args.filename;
-
-    /* Initialization */
-    /* TODO: this is placeholder code. Miniaudio objects have manual memory management, so we'd (probably) want to make these objects
-       globals or heap-allocate them, depending on their size. */
-
-    //ma_result result;
+    if (cli_args.filename)
+    {
+        char *input_file_path = cli_args.filename;
+        open_music_file(input_file_path);
+    }
 
 
-    /* if (ma_decoder_init_file(input_file_path, NULL, &decoder)) */
-    /* { */
-    /*     fprintf(stderr, "Error trying to open file %s\n", input_file_path); */
-    /*     return -2; */
-    /* } */
-
-    /* device_conf = ma_device_config_init(ma_device_type_playback); */
-    /* device_conf.playback.format = decoder.outputFormat; */
-    /* device_conf.playback.channels = decoder.outputChannels; */
-    /* device_conf.sampleRate = decoder.outputSampleRate; */
-    /* device_conf.dataCallback = data_callback; */
-    /* device_conf.pUserData = &decoder; */
-
-    /* if (ma_device_init(NULL, &device_conf, &device) != MA_SUCCESS) */
-    /* { */
-    /*     fprintf(stderr, "Failed to open playback device.\n"); */
-    /*     ma_decoder_uninit(&decoder); */
-    /*     return -3; */
-    /* } */
-
-
-    /* if (ma_device_start(&device) != MA_SUCCESS) */
-    /* { */
-    /*     fprintf(stderr, "Failed to start playback device.\n"); */
-    /*     ma_device_uninit(&device); */
-    /*     ma_decoder_uninit(&decoder); */
-    /*     return -4; */
-    /* } */
-    open_music_file(input_file_path);
 
     if ((curr_dir_files_length = list_files("./", ~0 & ~FTYPE_UNKNOWN, &curr_dir_files)) < 0)
     {
         fprintf(stderr, "Could not get file list.\n");
     }
-
-    printf("Playing %s, press enter to quit...\n", input_file_path);
-
-    /* Platform vars */
-
 
     /* GLFW initialization */
 
@@ -211,10 +173,6 @@ int main(int argc, char *argv[])
 
     glfwMakeContextCurrent(win);
     glfwGetWindowSize(win, &glfw.width, &glfw.height);
-
-    //glfwSetCursorPosCallback(win, cursor_position_callback);
-    //if (!glfwSetMouseButtonCallback(win, mouse_button_callback))
-    //    fprintf(stderr, "Error setting mouse button callback\n");
 
 
     /* Get openGL context */
@@ -302,7 +260,7 @@ void draw_gui()
             nk_layout_row_dynamic(ctx, 0, 1);
             if (nk_tree_push(ctx, NK_TREE_TAB, "WIP", NK_MINIMIZED))
             {
-                nk_label(ctx, "File picker goes here", NK_TEXT_LEFT);
+                nk_label(ctx, topdir, NK_TEXT_LEFT);
                 draw_file_picker();
                 nk_tree_pop(ctx);
             }
@@ -336,8 +294,6 @@ void draw_file_picker()
     nk_layout_row_dynamic(ctx, 500, 1);
     if (nk_group_begin(ctx, "File Picker", NK_WINDOW_BORDER))
     {
-        nk_layout_row_dynamic(ctx, 30, 1);
-        nk_label(ctx, topdir, NK_TEXT_LEFT);
         nk_layout_row_begin(ctx, NK_DYNAMIC, 0, 2);
         nk_layout_row_push(ctx, 0.25f);
         nk_label(ctx, "Name", NK_TEXT_CENTERED);

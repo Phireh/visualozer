@@ -41,6 +41,8 @@ int get_current_dir(char *destination)
    the memory for such array. The starting position of the array is stored at
    *info.
 
+   The resulting array is sorted by filename.
+
   Return code: the number of files found, or a negative number on error
   TODO: Cache / filesystem watch the result of this function
 */
@@ -97,6 +99,8 @@ int list_files(char *path, filetype_t extension_mask, fileinfo_t **info)
         strcpy(fi->filename, ent->d_name);
         fi->type = ftype;
     }
+
+    qsort(*info, retvalue, sizeof(fileinfo_t), cmpfilename);
     closedir(dir);
     return retvalue;
 }

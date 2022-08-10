@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stddef.h>
+#include "types.h"
 
 bool str_ends_with(const char *haystack, const char *needle)
 {
@@ -12,6 +13,11 @@ bool str_ends_with(const char *haystack, const char *needle)
     char *p = strstr(haystack, needle);
 
     return (p && (haystack + haystack_length) - p == (ptrdiff_t)needle_length);
+}
+
+int cmpfilename(const void *a, const void *b)
+{
+    return strcmp(((fileinfo_t*)a)->filename, ((fileinfo_t*)b)->filename);
 }
 
 #endif
