@@ -9,6 +9,7 @@ bool open_music_file(char *relpath);
 
 int list_files(char *path, filetype_t extension_mask, fileinfo_t **info);
 bool str_ends_with(const char *haystack, const char *needle);
+int exit_directory();
 
 /* Global vars */
 
@@ -19,6 +20,8 @@ const int32_t default_height = 720;
 
 static double delta_x = 0;
 static double delta_y = 0;
+
+nk_bool show_hidden_files;
 
 int window_drag_active;
 int32_t mouse_drag_initial_x;
@@ -31,7 +34,7 @@ int width;
 int height;
 
 fileinfo_t *curr_dir_files;
-size_t curr_dir_files_length;
+int32_t curr_dir_files_length;
 char topdir[PATH_MAX+1] = ".";
 
 
@@ -260,7 +263,12 @@ void draw_gui()
             nk_layout_row_dynamic(ctx, 0, 1);
             if (nk_tree_push(ctx, NK_TREE_TAB, "WIP", NK_MINIMIZED))
             {
+                nk_layout_row_template_begin(ctx, 30);
+                nk_layout_row_template_push_variable(ctx, 1);
+                nk_layout_row_template_push_static(ctx, 100);
+                nk_layout_row_template_end(ctx);
                 nk_label(ctx, topdir, NK_TEXT_LEFT);
+                nk_checkbox_label(ctx, "Show hidden", &show_hidden_files);
                 draw_file_picker();
                 nk_tree_pop(ctx);
             }
@@ -301,44 +309,44 @@ void draw_file_picker()
         nk_label(ctx, "Placeholder", NK_TEXT_LEFT);
         nk_layout_row_end(ctx);
 
-        for (size_t i = 0; i < curr_dir_files_length; ++i)
+        for (int i = 0; i < curr_dir_files_length; ++i)
         {
-            nk_layout_row_begin(ctx, NK_DYNAMIC, 0, 2);
-            nk_layout_row_push(ctx, 0.25f);
-            if (nk_button_label(ctx, curr_dir_files[i].filename))
+            bool show_file = (show_hidden_files || !strcmp(curr_dir_files[i].filename, "..") || curr_dir_files[i].filename[0] != '.');
+            if (show_file)
             {
-                if (curr_dir_files[i].type & FTYPE_DIR)
+                nk_layout_row_begin(ctx, NK_DYNAMIC, 0, 2);
+                nk_layout_row_push(ctx, 0.25f);
+                if (nk_button_label(ctx, curr_dir_files[i].filename))
                 {
-                    /* If clicked file is a directory, try to get inside */
-                    enter_directory(curr_dir_files[i].filename);
-                    //fprintf(stdout, "topdir: %s\n", topdir);
-                    free(curr_dir_files);
-                    curr_dir_files = NULL;
-                    if ((curr_dir_files_length = list_files(topdir, ~0 & ~FTYPE_UNKNOWN, &curr_dir_files)) < 0)
+                    if (curr_dir_files[i].type & FTYPE_DIR)
                     {
-                        fprintf(stderr, "Could not get file list.\n");
+                        /* If clicked file is a directory, try to get inside */
+                        enter_directory(curr_dir_files[i].filename);
+                        //fprintf(stdout, "topdir: %s\n", topdir);
+                        curr_dir_files_length = list_files(topdir, ~0 & ~FTYPE_UNKNOWN, &curr_dir_files);
+                        if (curr_dir_files_length < 0)
+                        {
+                            fprintf(stderr, "Could not get file list for %s.\n", topdir);
+                            exit_directory();
+                            curr_dir_files_length = list_files(topdir, ~0 & ~FTYPE_UNKNOWN, &curr_dir_files);
+                        }
                     }
-                    else
+                    else if (curr_dir_files[i].type & FTYPE_AUDIO)
                     {
-                        nk_layout_row_end(ctx);
-                        goto early_exit_picker;
+                        char filepath[PATH_MAX+1];
+                        strcpy(filepath, topdir);
+                        strcat(filepath, "/");
+                        strcat(filepath, curr_dir_files[i].filename);
+                        open_music_file(filepath);
                     }
+
                 }
-                else if (curr_dir_files[i].type & FTYPE_AUDIO)
-                {
-                    char filepath[PATH_MAX+1];
-                    strcpy(filepath, topdir);
-                    strcat(filepath, "/");
-                    strcat(filepath, curr_dir_files[i].filename);
-                    open_music_file(filepath);
-                }
+                nk_layout_row_push(ctx, 0.75f);
+                nk_label(ctx, "Column 2", NK_TEXT_LEFT);
+                nk_layout_row_end(ctx);
             }
-            nk_layout_row_push(ctx, 0.75f);
-            nk_label(ctx, "Column 2", NK_TEXT_LEFT);
-            nk_layout_row_end(ctx);
         }
 
-    early_exit_picker:
         nk_group_end(ctx);
     }
 }
@@ -351,6 +359,14 @@ int enter_directory(char *relpath)
     strcpy(aux, topdir);
     strcat(aux, "/");
     strcat(aux, relpath);
+    return absolute_path(topdir, aux);
+}
+
+int exit_directory()
+{
+    char aux[PATH_MAX+1];
+    strcpy(aux, topdir);
+    strcat(aux, "/../");
     return absolute_path(topdir, aux);
 }
 

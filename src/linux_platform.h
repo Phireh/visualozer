@@ -54,6 +54,13 @@ int list_files(char *path, filetype_t extension_mask, fileinfo_t **info)
 
     if (!dir) return -1;
 
+    if (*info)
+    {
+        // Free previous array if present before calling realloc
+        free(*info);
+        *info = NULL;
+    }
+
     while ((ent = readdir(dir)))
     {
         //fprintf(stdout, "Test %d with file %s\n", ++c, ent->d_name);
